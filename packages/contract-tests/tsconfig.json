@@ -1,0 +1,14 @@
+{
+  "extends": "./../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./build",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+  },
+  "include": [
+    "./hardhat.config.ts",
+    "./hardhat-env.d.ts",
+    "./node_modules/@nomiclabs/hardhat-ethers/src/type-extensions.d.ts",
+    "./node_modules/@nomiclabs/hardhat-waffle/src/type-extensions.d.ts"
+  ]
+}

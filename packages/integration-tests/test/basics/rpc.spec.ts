@@ -4,35 +4,34 @@
  * https://github.com/ethereum-optimism
  */
 
-import { Config, etherbase } from '../../../common'
-import { JsonRpcServer } from '@eth-optimism/core-utils'
+/* Imports: External */
 import { Web3Provider } from '@ethersproject/providers'
 import { ganache } from '@eth-optimism/ovm-toolchain'
-import { OptimismProvider, sighashEthSign } from '@eth-optimism/provider'
-import { verifyMessage } from '@ethersproject/wallet'
-import { parse } from '@ethersproject/transactions'
-import { SignatureLike, joinSignature } from '@ethersproject/bytes'
+import { OptimismProvider } from '@eth-optimism/provider'
 
-const DUMMY_ADDRESS = '0x' + '1234'.repeat(10)
+/* Imports: Internal */
+import { Config } from '../../../../common'
+import { DUMMY_ADDRESS } from '../helpers/constants'
 
-describe('Transactions', () => {
-  let provider
-
+describe('Basic RPC tests', () => {
+  let provider: OptimismProvider
+  let signer: any
+  let chainId: any
+  let address: string
   before(async () => {
-    const web3 = new Web3Provider(
+    provider = new OptimismProvider(Config.L2NodeUrlWithPort(), new Web3Provider(
       ganache.provider({
         mnemonic: Config.Mnemonic(),
       })
-    )
+    ))
 
-    provider = new OptimismProvider(Config.L2NodeUrlWithPort(), web3)
+    provider.pollingInterval = 10
+    signer = provider.getSigner()
+    chainId = await signer.getChainId()
+    address = await signer.getAddress()
   })
 
   it('should send eth_sendRawEthSignTransaction', async () => {
-    const signer = provider.getSigner()
-    const chainId = await signer.getChainId()
-
-    const address = await signer.getAddress()
     const nonce = await provider.getTransactionCount(address)
 
     const tx = {
@@ -48,6 +47,8 @@ describe('Transactions', () => {
     const hex = await signer.signTransaction(tx)
 
     const txid = await provider.send('eth_sendRawEthSignTransaction', [hex])
+    await provider.waitForTransaction(txid)
+
     const transaction = await provider.getTransaction(txid)
 
     // The correct signature hashing was performed
@@ -68,10 +69,6 @@ describe('Transactions', () => {
   })
 
   it('should sendTransaction', async () => {
-    const signer = provider.getSigner()
-    const chainId = await signer.getChainId()
-
-    const address = await signer.getAddress()
     const nonce = await provider.getTransactionCount(address)
 
     const tx = {
@@ -123,7 +120,7 @@ describe('Transactions', () => {
     }
 
     for (const estimate of estimates) {
-      estimate.toNumber().should.eq(7999999)
+      estimate.toNumber().should.eq(11999999)
     }
   })
 
@@ -142,7 +139,6 @@ describe('Transactions', () => {
       value: 0,
     }
 
-    const signer = provider.getSigner()
     const result = await signer.sendTransaction(tx)
 
     const txn = await provider.getTransaction(result.hash)
