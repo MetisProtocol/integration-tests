@@ -1,5 +1,5 @@
 {
-  "name": "@metiseth-optimism/mvm-tools",
+  "name": "metiseth-optimism-mvm-tools",
   "version": "0.0.1",
   "description": "[Optimism] Optimistic Rollup Integration Test Suite",
   "main": "build/index.js",

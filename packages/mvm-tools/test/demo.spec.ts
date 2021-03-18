@@ -4,7 +4,7 @@ import { JsonRpcProvider } from '@ethersproject/providers'
 
 import { Config } from '../../../common'
 import { Watcher } from '@eth-optimism/watcher'
-import { getContractInterface, getContractFactory } from '@eth-optimism/contracts'
+import { getContractInterface, getContractFactory } from 'metiseth-optimism-contracts'
 import l1SimnpleStorageJson = require('../../../contracts/build/SimpleStorage.json')
 import l2SimpleStorageJson = require('../../../contracts/build-ovm/SimpleStorage.json')
 import l1erc20Json = require('../../../contracts/build/MVM_ERC20.json')
@@ -13,11 +13,19 @@ import l2erc20Json = require('../../../contracts/build-ovm/MVM_ERC20.json')
 import {
   Contract, ContractFactory, Wallet, utils
 } from 'ethers'
+import * as path from 'path'
+import dotenv = require('dotenv')
 
 let l1erc20
 let l2erc20
 let l1MessengerAddress
 let l2MessengerAddress
+
+const envPath = path.join(__dirname, '/.env');
+dotenv.config({ path: envPath })
+
+console.log(envPath)
+  
 const L1_USER_PRIVATE_KEY = Config.DeployerPrivateKey()
 const L2_USER_PRIVATE_KEY = Config.DeployerPrivateKey()
 const L2_TAX_PRIVATE_KEY = Config.DeployerPrivateKey()

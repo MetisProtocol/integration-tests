@@ -2,7 +2,7 @@ import { expect } from 'chai'
 import assert = require('assert')
 import { JsonRpcProvider, TransactionResponse } from '@ethersproject/providers'
 import { BigNumber, Contract, Wallet, utils } from 'ethers'
-import { getContractInterface } from '@eth-optimism/contracts'
+import { getContractInterface } from 'metiseth-optimism-contracts'
 import { Watcher } from '@eth-optimism/watcher'
 
 import { getEnvironment, waitForDepositTypeTransaction, waitForWithdrawalTypeTransaction } from '../helpers'
