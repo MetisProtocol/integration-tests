@@ -19,7 +19,8 @@
 /packages/**/LICENSE.txt
 *.test.tmp
 /**/package-lock.json
-
+/**/yarn.lock
+yarn.lock
 /**/.env
 
 /**/*.log
