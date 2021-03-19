@@ -88,7 +88,7 @@ describe('MVM_ERC20', async () => {
   it('deploy all contracts for test',async()=>{
     
     //dead address in rollup dump config at geth l2
-    const l2AddressManager = new Contract("0x4200000000000000000000000000000000000008", addressManagerInterface, l2Provider)
+    const l2AddressManager = new Contract("0x4200000000000000000000000000000000000008", addressManagerInterface, l2Wallet)
     // console.log(l2AddressManager)
     l1EthGateway = new Contract(
       await AddressManager.getAddress('OVM_L1ETHGateway'),
@@ -108,31 +108,42 @@ describe('MVM_ERC20', async () => {
         ,{nonce:l1Nonce++}
       )
     console.log("l1erc20:"+l1erc20.address)
-    l2erc20 = await l2ERC20Factory.deploy(
-        initialAmount, tokenName, tokenDecimals, TokenSymbol, taxWallet.address, TaxRate, l1MessengerAddress, l2MessengerAddress
-        ,{nonce:l1Nonce++}
-      )
-    console.log("l2erc20:"+l2erc20.address)
     var l2Nonce = await l2Provider.getTransactionCount(l2Wallet.address,"latest");
     console.log("current l2 nonce:"+l2Nonce)
+    l2erc20 = await l2ERC20Factory.deploy(
+        initialAmount, tokenName, tokenDecimals, TokenSymbol, taxWallet.address, TaxRate, l1MessengerAddress, l2MessengerAddress
+        ,{nonce:l2Nonce++}
+      )
+    console.log("l2erc20:"+l2erc20.address)
     l2mvmcb=await mvmCoinBaseFactory.deploy(
         l2MessengerAddress,l1ERC20Gateway.address,9,tokenName,TokenSymbol
         ,{nonce:l2Nonce++}
       )
     console.log("l2mvmcb:"+l2mvmcb.address)
-    l1erc20.init(l1erc20.address,l2erc20.address);
-    l2erc20.init(l1erc20.address,l2erc20.address);
-    l2mvmcb.setTax(taxWallet.address,TaxRate)
-    l2AddressManager.setAddress("MVM_CoinBase",l2mvmcb)
+    await l1erc20.init(l1erc20.address,l2erc20.address
+        ,{nonce:l1Nonce++}
+        )
+    console.log("test1")
+    await l2erc20.init(l1erc20.address,l2erc20.address
+        ,{nonce:l2Nonce++}
+        )
+    console.log("test2")
+    await l2mvmcb.setTax(taxWallet.address,TaxRate
+        ,{nonce:l2Nonce++}
+        )
+    console.log("test3")
+    // await l2AddressManager.setAddress("MVM_CoinBase",l2mvmcb
+    //     ,{nonce:l2Nonce++}
+    //     )
     
-    console.log("address manager:"+l2AddressManager.address)
-    let coinbase=await AddressManager.getAddress('MVM_CoinBase')
-    l2mvmcb = new Contract(coinbase, mvmCoinBaseFactory.interface, l2Wallet)
+    // console.log("address manager:"+l2AddressManager.address)
+    //await AddressManager.getAddress('MVM_CoinBase')
+    //l2mvmcb = new Contract(coinbase, mvmCoinBaseFactory.interface, l2Wallet)
     
   })
 
-  it('should first test', async () => {
-    var l2Nonce = await l2Provider.getTransactionCount(l2Wallet.address,"latest")+1;
+  it.skip('should first test', async () => {
+    var l2Nonce = await l2Provider.getTransactionCount(l2Wallet.address,"latest");
     const transfer = await l2erc20.transfer(alice.address, 100
       ,{nonce:l2Nonce++})
     const receipt = await transfer.wait()
@@ -142,38 +153,39 @@ describe('MVM_ERC20', async () => {
     
   })
   
-  it.skip('should second test', async () => {
-    l1EthGateway.l2ERC20Gateway=l2mvmcb.address
+  it('should second test', async () => {
+    //l1EthGateway.l2ERC20Gateway=l2mvmcb.address
     
-    const depositAmount = utils.parseEther('10000')
+    const depositAmount = utils.parseEther('1')
   
-    var l2Nonce = await l2Provider.getTransactionCount(l2Wallet.address,"latest")+1;
+    var l1Nonce = await l1Provider.getTransactionCount(l1Wallet.address,"latest")
     await l1EthGateway.deposit({
         value: depositAmount,
         gasLimit: '0x100000',
         gasPrice: 0,
-        nonce:l2Nonce++
+        nonce:l1Nonce++
       })
       //depositTo("addr",{})
+    console.log("l1 wallet eth balance:"+await l1Wallet.getBalance())
       
-    console.log("l1 wallet eth balance:"+l1EthGateway.balanceOf(l1Wallet.address))
-      
+    var l2Nonce = await l2Provider.getTransactionCount(l2Wallet.address,"latest");
     const transfer = await l2mvmcb.transfer(alice.address, 100,
         {nonce:l2Nonce++}
       )
+      
     const receipt = await transfer.wait()
+    console.log(receipt)
+    console.log("alice token balance:"+ await l2mvmcb.balanceOf(alice.address),{nonce:l2Nonce++})
+    console.log("tax wallet token balance:"+ await l2mvmcb.balanceOf(taxWallet.address))
+    console.log("l2 wallet token balance:"+ await l2mvmcb.balanceOf(l2Wallet.address))
     
-    console.log("alice token balance:"+l2mvmcb.balanceOf(alice.address))
-    console.log("tax wallet token balance:"+l2mvmcb.balanceOf(taxWallet.address))
-    console.log("l2 wallet token balance:"+l2mvmcb.balanceOf(l2Wallet.address))
-    
-    await l2mvmcb.withdraw(l2mvmcb.balanceOf(l2Wallet.address)/2,{
+    await l2mvmcb.withdraw( await l2mvmcb.balanceOf(l2Wallet.address)/2,{
         gasLimit: '0x100000',
         gasPrice: 0,
        nonce:l2Nonce++
       })
     
-    console.log("l2 wallet token balance:"+l2mvmcb.balanceOf(l2Wallet.address))
-    console.log("l1 wallet eth balance:"+l1EthGateway.balanceOf(l1Wallet.address))
+    console.log("l2 wallet token balance:"+ await l2mvmcb.balanceOf(l2Wallet.address))
+    console.log("l1 wallet eth balance:"+ await l1Wallet.getBalance())
   })
 })
