@@ -33,7 +33,7 @@
     "url": "https://github.com/ethereum-optimism/optimistic-rollup-integration-tests.git"
   },
   "dependencies": {
-    "metiseth-optimism-contracts": "^1.0.1",
+    "metiseth-optimism-contracts": "^1.0.*",
     "@eth-optimism/core-db": "^0.0.1-alpha.30",
     "@eth-optimism/core-utils": "^0.0.1-alpha.30",
     "@eth-optimism/plugins": "^0.0.16",
