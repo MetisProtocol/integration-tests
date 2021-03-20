@@ -1,191 +1,162 @@
 import { expect } from 'chai'
 import assert = require('assert')
-import { JsonRpcProvider } from '@ethersproject/providers'
-
-import { Config } from '../../../common'
+import { JsonRpcProvider, TransactionResponse } from '@ethersproject/providers'
+import { BigNumber, Contract, Wallet, utils } from 'ethers'
+import { getContractInterface } from 'metiseth-optimism-contracts'
 import { Watcher } from '@eth-optimism/watcher'
-import { getContractInterface, getContractFactory } from 'metiseth-optimism-contracts'
-import l1SimnpleStorageJson = require('../../../contracts/build/SimpleStorage.json')
-import l2SimpleStorageJson = require('../../../contracts/build-ovm/SimpleStorage.json')
-import l1erc20Json = require('../../../contracts/build/MVM_ERC20.json')
-import l2erc20Json = require('../../../contracts/build-ovm/MVM_ERC20.json')
-
-import {
-  Contract, ContractFactory, Wallet, utils
-} from 'ethers'
-import * as path from 'path'
 import dotenv = require('dotenv')
+import * as path from 'path';
 
-let l1erc20
-let l2erc20
-let l1MessengerAddress
-let l2MessengerAddress
+import { getEnvironment, waitForDepositTypeTransaction, waitForWithdrawalTypeTransaction } from '../helpers'
 
-const envPath = path.join(__dirname, '/.env');
-dotenv.config({ path: envPath })
+const l1GatewayInterface = getContractInterface('OVM_L1ETHGateway')
 
-console.log(envPath)
+const MVM_Coinbase_ADDRESS = '0x4200000000000000000000000000000000000006'
+const PROXY_SEQUENCER_ENTRYPOINT_ADDRESS = '0x4200000000000000000000000000000000000004'
+
+let l1Provider: JsonRpcProvider
+let l2Provider: JsonRpcProvider
+let l1Wallet: Wallet
+let l2Wallet: Wallet
+let AddressManager: Contract
+let watcher: Watcher
+
+describe('Fee Payment Integration Tests', async () => {
+  const envPath = path.join(__dirname, '/.env');
+  console.log(envPath)
+  dotenv.config({ path: envPath })
   
-const L1_USER_PRIVATE_KEY = Config.DeployerPrivateKey()
-const L2_USER_PRIVATE_KEY = Config.DeployerPrivateKey()
-const L2_TAX_PRIVATE_KEY = Config.DeployerPrivateKey()
-const SEQUENCER_PRIVATE_KEY = Config.SequencerPrivateKey()
-const goerliURL = Config.L1NodeUrlWithPort()
-const optimismURL = Config.L2NodeUrlWithPort()
-const l1Provider = new JsonRpcProvider(goerliURL)
-const l2Provider = new JsonRpcProvider(optimismURL)
-const l1Wallet = new Wallet(L1_USER_PRIVATE_KEY, l1Provider)
-const l2Wallet = new Wallet(L2_USER_PRIVATE_KEY, l2Provider)
-const taxWallet = new Wallet(L2_TAX_PRIVATE_KEY, l2Provider)
+  let OVM_L1ETHGateway: Contract
+  let MVM_Coinbase: Contract
 
-const addressManagerAddress = Config.AddressResolverAddress()
-const addressManagerInterface = getContractInterface('Lib_AddressManager')
-const AddressManager = new Contract(addressManagerAddress, addressManagerInterface, l1Provider)
-
-const l1ERC20Factory=new ContractFactory(l1erc20Json.abi, l1erc20Json.bytecode, l1Wallet)
-const l2ERC20Factory=new ContractFactory(l2erc20Json.abi, l2erc20Json.bytecode, l2Wallet)
-
-  
-let watcher
-const initWatcher = async () => {
-  l1MessengerAddress = await AddressManager.getAddress('Proxy__OVM_L1CrossDomainMessenger')
-  l2MessengerAddress = await AddressManager.getAddress('OVM_L2CrossDomainMessenger')
-  return new Watcher({
-    l1: {
-      provider: l1Provider,
-      messengerAddress: l1MessengerAddress
-    },
-    l2: {
-      provider: l2Provider,
-      messengerAddress: l2MessengerAddress
+  const getBalances = async ():
+    Promise<{
+      l1UserBalance: BigNumber,
+      l2UserBalance: BigNumber,
+      l1GatewayBalance: BigNumber,
+      sequencerBalance: BigNumber,
+    }> => {
+      const l1UserBalance = BigNumber.from(
+        await l1Provider.send('eth_getBalance', [l1Wallet.address])
+      )
+      const l2UserBalance = await MVM_Coinbase.balanceOf(l2Wallet.address)
+      const sequencerBalance = await MVM_Coinbase.balanceOf(PROXY_SEQUENCER_ENTRYPOINT_ADDRESS)
+      const l1GatewayBalance = BigNumber.from(
+        await l1Provider.send('eth_getBalance', [OVM_L1ETHGateway.address])
+      )
+      return {
+        l1UserBalance,
+        l2UserBalance,
+        l1GatewayBalance,
+        sequencerBalance
+      }
     }
-  })
-}
-
-// const deposit = async (amount, value) => {
-//   const [msgHash] = await watcher.getMessageHashesFromL1Tx(l1ToL2Tx.hash)
-//   const receipt = await watcher.getL2TransactionReceipt(msgHash)
-// }
-
-let l2mvmcb
-const mvmCoinBaseFactory = getContractFactory('MVM_Coinbase',l2Wallet,true)
-let l1ERC20Gateway
-let l1EthGateway
-    
-describe('MVM_ERC20', async () => {
-  const alice = new Wallet(SEQUENCER_PRIVATE_KEY, l2Provider)
-  const initialAmount = 1000
-  const tokenName = 'OVM Test'
-  const tokenDecimals = 9
-  const TokenSymbol = 'OVM'
-  const TaxRate = 250
 
   before(async () => {
-      watcher = await initWatcher()
-    }
-  )
-  
-  it('deploy all contracts for test',async()=>{
-    
-    //dead address in rollup dump config at geth l2
-    const l2AddressManager = new Contract("0x4200000000000000000000000000000000000008", addressManagerInterface, l2Wallet)
-    // console.log(l2AddressManager)
-    l1EthGateway = new Contract(
+    const system = await getEnvironment()
+    l1Provider = system.l1Provider
+    l2Provider = system.l2Provider
+    l1Wallet = system.l1Wallet
+    l2Wallet = system.l2Wallet
+    AddressManager = system.AddressManager
+    watcher = system.watcher
+
+    OVM_L1ETHGateway = new Contract(
       await AddressManager.getAddress('OVM_L1ETHGateway'),
-      getContractInterface('OVM_L1ETHGateway'),
-      l1Wallet
-    )    
-    
-    l1ERC20Gateway = new Contract(
-      await AddressManager.getAddress('OVM_L1ERC20Gateway'),
-      getContractInterface('OVM_L1ERC20Gateway'),
+      l1GatewayInterface,
       l1Wallet
     )
-    var l1Nonce = await l1Provider.getTransactionCount(l1Wallet.address,"latest");
-    console.log("current l1 nonce:"+l1Nonce)
-    l1erc20 = await l1ERC20Factory.deploy(
-        initialAmount, tokenName, tokenDecimals, TokenSymbol, taxWallet.address, TaxRate, l1MessengerAddress, l2MessengerAddress
-        ,{nonce:l1Nonce++}
-      )
-    console.log("l1erc20:"+l1erc20.address)
-    var l2Nonce = await l2Provider.getTransactionCount(l2Wallet.address,"latest");
-    console.log("current l2 nonce:"+l2Nonce)
-    l2erc20 = await l2ERC20Factory.deploy(
-        initialAmount, tokenName, tokenDecimals, TokenSymbol, taxWallet.address, TaxRate, l1MessengerAddress, l2MessengerAddress
-        ,{nonce:l2Nonce++}
-      )
-    console.log("l2erc20:"+l2erc20.address)
-    l2mvmcb=await mvmCoinBaseFactory.deploy(
-        l2MessengerAddress,l1ERC20Gateway.address,9,tokenName,TokenSymbol
-        ,{nonce:l2Nonce++}
-      )
-    console.log("l2mvmcb:"+l2mvmcb.address)
-    await l1erc20.init(l1erc20.address,l2erc20.address
-        ,{nonce:l1Nonce++}
-        )
-    console.log("test1")
-    await l2erc20.init(l1erc20.address,l2erc20.address
-        ,{nonce:l2Nonce++}
-        )
-    console.log("test2")
-    await l2mvmcb.setTax(taxWallet.address,TaxRate
-        ,{nonce:l2Nonce++}
-        )
-    console.log("test3")
-    // await l2AddressManager.setAddress("MVM_CoinBase",l2mvmcb
-    //     ,{nonce:l2Nonce++}
-    //     )
-    
-    // console.log("address manager:"+l2AddressManager.address)
-    //await AddressManager.getAddress('MVM_CoinBase')
-    //l2mvmcb = new Contract(coinbase, mvmCoinBaseFactory.interface, l2Wallet)
-    
+
+    MVM_Coinbase = new Contract(
+      MVM_Coinbase_ADDRESS,
+      getContractInterface('MVM_Coinbase'),
+      l2Wallet
+    )
   })
 
-  it.skip('should first test', async () => {
-    var l2Nonce = await l2Provider.getTransactionCount(l2Wallet.address,"latest");
-    const transfer = await l2erc20.transfer(alice.address, 100
-      ,{nonce:l2Nonce++})
-    const receipt = await transfer.wait()
-    console.log("l1wallet balance:"+ await l1Wallet.getBalance())
-    console.log("l2wallet balance:"+ await l2Wallet.getBalance())
-    console.log("l1wallet balance:"+ await l2Wallet.getBalance())
-    
-  })
-  
-  it('should second test', async () => {
-    //l1EthGateway.l2ERC20Gateway=l2mvmcb.address
-    
+  beforeEach(async () => {
     const depositAmount = utils.parseEther('1')
-  
-    var l1Nonce = await l1Provider.getTransactionCount(l1Wallet.address,"latest")
-    await l1EthGateway.deposit({
+    // const d1=await MVM_Coinbase.depositForTest(l2Wallet.address,1000000000,{
+    //   gasLimit: '8999999',
+    //     gasPrice: 0
+    // })
+    // console.log(d1)
+    // const d=await MVM_Coinbase.transferFrom2(l1Wallet.address,l2Wallet.address,0,{
+    //   gasLimit: '8999999',
+    //     gasPrice: 0
+    // })
+    // console.log(d)
+    // const events=await MVM_Coinbase.queryFilter(MVM_Coinbase.filters["Transfer"](),"earliest","latest")
+    // console.log(events)
+    await waitForDepositTypeTransaction(
+      OVM_L1ETHGateway.depositTo(l1Wallet.address,{
         value: depositAmount,
-        gasLimit: '0x100000',
-        gasPrice: 0,
-        nonce:l1Nonce++
-      })
-      //depositTo("addr",{})
-    console.log("l1 wallet eth balance:"+await l1Wallet.getBalance())
-      
-    var l2Nonce = await l2Provider.getTransactionCount(l2Wallet.address,"latest");
-    const transfer = await l2mvmcb.transfer(alice.address, 100,
-        {nonce:l2Nonce++}
+        gasLimit: '8999999',
+        gasPrice: 0
+      }),
+      watcher, l1Provider, l2Provider
+    )
+  })
+
+  it('Paying a nonzero but acceptable gasPrice fee', async () => {
+    const preBalances = await getBalances()
+
+    const gasPrice = BigNumber.from(1_000_000)
+    const gasLimit = BigNumber.from(5_000_000)
+
+    // transfer with 0 value to easily pay a gas fee
+    const res: TransactionResponse = await MVM_Coinbase.transfer(
+      '0x1234123412341234123412341234123412341234',
+      0,
+      {
+        gasPrice,
+        gasLimit
+      }
+    )
+    await res.wait()
+
+    // make sure stored and served correctly by geth
+    expect(res.gasPrice.eq(gasPrice)).to.be.true
+    expect(res.gasLimit.eq(gasLimit)).to.be.true
+
+    const postBalances = await getBalances()
+    const feePaid = preBalances.l2UserBalance.sub(
+      postBalances.l2UserBalance
+    )
+
+    expect(
+      feePaid.
+        eq(
+          gasLimit.mul(gasPrice)
+        )
+    ).to.be.true
+  })
+
+  it('sequencer rejects transaction with a non-multiple-of-1M gasPrice', async () => {
+    const gasPrice = BigNumber.from(1_000_000 - 1)
+    const gasLimit = BigNumber.from('0x100000')
+
+    let err: string
+    try {
+      const res = await MVM_Coinbase.transfer(
+        '0x1234123412341234123412341234123412341234',
+        0,
+        {
+          gasPrice,
+          gasLimit
+        }
       )
-      
-    const receipt = await transfer.wait()
-    console.log(receipt)
-    console.log("alice token balance:"+ await l2mvmcb.balanceOf(alice.address),{nonce:l2Nonce++})
-    console.log("tax wallet token balance:"+ await l2mvmcb.balanceOf(taxWallet.address))
-    console.log("l2 wallet token balance:"+ await l2mvmcb.balanceOf(l2Wallet.address))
-    
-    await l2mvmcb.withdraw( await l2mvmcb.balanceOf(l2Wallet.address)/2,{
-        gasLimit: '0x100000',
-        gasPrice: 0,
-       nonce:l2Nonce++
-      })
-    
-    console.log("l2 wallet token balance:"+ await l2mvmcb.balanceOf(l2Wallet.address))
-    console.log("l1 wallet eth balance:"+ await l1Wallet.getBalance())
+      await res.wait()
+    } catch (e) {
+      err = e.body
+    }
+
+    if (err === undefined) {
+      throw new Error('Transaction did not throw as expected')
+    }
+
+    expect(
+      err.includes('Gas price must be a multiple of 1,000,000 wei')
+    ).to.be.true
   })
 })

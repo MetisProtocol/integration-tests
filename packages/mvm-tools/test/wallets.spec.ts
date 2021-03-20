@@ -11,7 +11,7 @@ describe('Wallet tools in test', async () => {
   before(async () => {
   })
 
-  it('create random wallet private key tool', async () => {
+  it.skip('create random wallet private key tool', async () => {
     var pk=Wallet.createRandom().privateKey;
     console.log(pk);
   })
