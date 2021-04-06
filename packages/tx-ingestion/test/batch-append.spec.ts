@@ -4,20 +4,14 @@
  * https://github.com/ethereum-optimism
  */
 
-import { Config, sleep, poll } from '../../../common'
+import { Config, sleep } from '../../../common'
 
-import {
-  Provider,
-  Web3Provider,
-  JsonRpcProvider,
-} from '@ethersproject/providers'
+import { Web3Provider, JsonRpcProvider } from '@ethersproject/providers'
 import { Wallet } from '@ethersproject/wallet'
 import { Contract } from '@ethersproject/contracts'
 import { add0x } from '@eth-optimism/core-utils'
 import { ganache } from '@eth-optimism/plugins/ganache'
 import { OptimismProvider } from '@eth-optimism/provider'
-import { getContractAddress } from '@ethersproject/address'
-import { computeAddress } from '@ethersproject/transactions'
 import { getContractFactory } from '@eth-optimism/contracts'
 import assert = require('assert')
 
@@ -52,7 +46,9 @@ describe('Transaction Ingestion', () => {
       addressResolverAddress
     )
 
-    ctcAddress = await addressResolver.getAddress('OVM_CanonicalTransactionChain')
+    ctcAddress = await addressResolver.getAddress(
+      'OVM_CanonicalTransactionChain'
+    )
 
     const CanonicalTransactionChainFactory = getContractFactory(
       'OVM_CanonicalTransactionChain'
@@ -103,7 +99,7 @@ describe('Transaction Ingestion', () => {
   it('should order transactions correctly', async () => {
     // Wait until each tx from the previous test has
     // been executed
-    let tip;
+    let tip
     do {
       tip = await l2Provider.getBlock('latest')
       await sleep(5000)
@@ -122,7 +118,7 @@ describe('Transaction Ingestion', () => {
       assert(typeof hash === 'string')
       // Use as any hack because additional properties are
       // added to the transaction response
-      const tx = await l2Provider.getTransaction(hash) as any
+      const tx = (await l2Provider.getTransaction(hash)) as any
       // The `to` addresses are defined in the previous test and
       // increment sequentially.
       assert.equal(tx.to, '0x' + `${i}`.repeat(40))
