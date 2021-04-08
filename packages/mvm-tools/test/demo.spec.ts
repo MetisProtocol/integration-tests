@@ -44,9 +44,7 @@ describe('Fee Payment Integration Tests', async () => {
       )
       const l2UserBalance = await MVM_Coinbase.balanceOf(l2Wallet.address)
       const sequencerBalance = await MVM_Coinbase.balanceOf(PROXY_SEQUENCER_ENTRYPOINT_ADDRESS)
-      const l1GatewayBalance = BigNumber.from(
-        await l1Provider.send('eth_getBalance', [OVM_L1ETHGateway.address])
-      )
+      const l1GatewayBalance = await MVM_Coinbase.balanceOf('0x4200000000000000000000000000000000000005')
       return {
         l1UserBalance,
         l2UserBalance,
@@ -69,19 +67,22 @@ describe('Fee Payment Integration Tests', async () => {
       l1GatewayInterface,
       l1Wallet
     )
-
+console.log("init")
     MVM_Coinbase = new Contract(
       MVM_Coinbase_ADDRESS,
       getContractInterface('MVM_Coinbase'),
       l2Wallet
     )
-    await MVM_Coinbase.setTax(TAX_ADDRESS,100)
+    
+console.log("init2")
+    //await MVM_Coinbase.setTax(TAX_ADDRESS,100)
 
     OVM_L2CrossDomainMessenger = new Contract(
       '0x4200000000000000000000000000000000000007',
       getContractInterface('OVM_L2CrossDomainMessenger'),
       l2Wallet
     )
+console.log("init3")
   })
 
   beforeEach(async () => {
@@ -103,11 +104,11 @@ describe('Fee Payment Integration Tests', async () => {
   it('Paying a nonzero but acceptable gasPrice fee', async () => {
     const preBalances = await getBalances()
 
-    const gasPrice = BigNumber.from(0)
-    const gasLimit = BigNumber.from(5_000_000)
+    const gasPrice = BigNumber.from(1_000_000)
+    const gasLimit = BigNumber.from(8_000_000)
 
     var postBalances = await getBalances()
-    console.log(postBalances.l1UserBalance+","+postBalances.l2UserBalance+","+postBalances.l1GatewayBalance+","+postBalances.sequencerBalance)
+    console.log("l1 wallet balance:"+postBalances.l1UserBalance+",l2 wallet balance"+postBalances.l2UserBalance+",l1gateway balance"+postBalances.l1GatewayBalance+",seq balance"+postBalances.sequencerBalance)
     // transfer with 0 value to easily pay a gas fee
     const res: TransactionResponse = await MVM_Coinbase.transfer(
       PROXY_SEQUENCER_ENTRYPOINT_ADDRESS,
@@ -119,7 +120,7 @@ describe('Fee Payment Integration Tests', async () => {
     )
     await res.wait()
     postBalances = await getBalances()
-    console.log(postBalances.l1UserBalance+","+postBalances.l2UserBalance+","+postBalances.l1GatewayBalance+","+postBalances.sequencerBalance)
+    console.log("l1 wallet balance:"+postBalances.l1UserBalance+",l2 wallet balance"+postBalances.l2UserBalance+",l1gateway balance"+postBalances.l1GatewayBalance+",seq balance"+postBalances.sequencerBalance)
     const taxBalance = await MVM_Coinbase.balanceOf(TAX_ADDRESS)
     console.log("tax balance:"+taxBalance)
 
